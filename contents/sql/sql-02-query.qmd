@@ -86,6 +86,59 @@ FROM iris
 GROUP BY species;
 ```
 
+## Count(*) vs Count(column)
+
+Great question! The `*` in `COUNT(*)` has a specific meaning in SQL:
+
+```sql
+COUNT(*)           -- Counts ALL rows in each group
+COUNT(column_name) -- Counts NON-NULL values in that column
+```
+
+Let's say you have this data:
+```
+species    | sepal_length
+-----------|-------------
+setosa     | 5.1
+setosa     | NULL
+setosa     | 4.9
+versicolor | 7.0
+versicolor | 6.4
+```
+
+Different COUNT results:
+
+```sql
+-- This counts ALL rows (including NULLs)
+COUNT(*) 
+-- setosa: 3 rows, versicolor: 2 rows
+
+-- This counts only NON-NULL values in sepal_length
+COUNT(sepal_length)
+-- setosa: 2 rows (NULL excluded), versicolor: 2 rows
+```
+
+
+**R tidyverse Equivalent**
+
+```r
+# SQL: COUNT(*)
+iris %>% 
+  group_by(species) %>% 
+  summarise(count = n())         # n() counts all rows
+
+# SQL: COUNT(column) 
+iris %>% 
+  group_by(species) %>% 
+  summarise(count = sum(!is.na(sepal_length)))  # counts non-NA values
+```
+
+**Best Practice**
+
+- Use `COUNT(*)` when you want to count **total rows** in each group
+- Use `COUNT(column)` when you want to count **non-missing values** for that specific column
+- For iris dataset (no missing data), both are equivalent, but `COUNT(*)` is more common and slightly faster
+
 ## Having
 
 Post-aggregation filter
