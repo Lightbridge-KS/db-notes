@@ -1,0 +1,194 @@
+# Basic SQL Query
+
+Basic SQL Queries for Iris Dataset
+(R tidyverse equivalents in comments)
+
+## Select
+
+`dplyr::select`
+
+**R:** 
+
+```r
+iris %>% select(species, sepal_length, sepal_width)
+```
+
+```sql
+SELECT species, sepal_length, sepal_width 
+FROM iris 
+LIMIT 10;
+```
+
+## Where
+
+`dplyr::filter`
+
+**R:**
+
+```r
+iris %>% filter(species == 'setosa')
+```
+
+```sql
+SELECT * 
+FROM iris 
+WHERE species = 'setosa';
+```
+
+## Multiple Conditions
+
+**R:**
+
+```r
+iris %>% filter(species == 'setosa', sepal_length > 5.0)
+```
+
+```sql
+SELECT * 
+FROM iris 
+WHERE species = 'setosa' AND sepal_length > 5.0;
+```
+
+## Order By
+
+`dplyr::arrange`
+
+**R:**
+
+```r
+iris %>% arrange(desc(sepal_length))
+```
+
+```sql
+SELECT * 
+FROM iris 
+ORDER BY sepal_length DESC;
+```
+
+## Group By + Aggregation
+
+`dplyr::group_by` + `summarise`
+
+**R:**
+
+```r
+iris %>% group_by(species) %>% summarise(avg_length = mean(sepal_length))
+```
+
+```sql
+SELECT 
+    species,
+    COUNT(*) as count,
+    AVG(sepal_length) as avg_sepal_length,
+    MIN(sepal_length) as min_sepal_length,
+    MAX(sepal_length) as max_sepal_length
+FROM iris 
+GROUP BY species;
+```
+
+## Having
+
+Post-aggregation filter
+
+**R:**
+
+```r
+iris %>% 
+  group_by(species) %>% 
+  summarise(avg_length = mean(sepal_length)) %>% 
+  filter(avg_length > 5.5)
+```
+
+```sql
+SELECT 
+    species,
+    AVG(sepal_length) as avg_sepal_length
+FROM iris 
+GROUP BY species
+HAVING AVG(sepal_length) > 5.5;
+```
+
+## Creating New Columns
+
+`dplyr::mutate`
+
+**R:**
+
+```r
+iris %>% mutate(sepal_ratio = sepal_length / sepal_width)
+```
+
+```sql
+SELECT *,
+    sepal_length / sepal_width as sepal_ratio,
+    CASE 
+        WHEN sepal_length > 6.0 THEN 'Large'
+        WHEN sepal_length > 4.5 THEN 'Medium' 
+        ELSE 'Small' 
+    END as size_category
+FROM iris;
+```
+
+## Subqueries
+
+Nested operations
+
+**R:**
+
+```r
+iris %>% filter(sepal_length > mean(sepal_length))
+```
+
+```sql
+SELECT * 
+FROM iris 
+WHERE sepal_length > (
+    SELECT AVG(sepal_length) FROM iris
+);
+```
+
+## Common Table Expressions (CTE)
+
+Creating intermediate datasets
+
+**R:**
+
+```r
+temp <- iris %>% 
+  group_by(species) %>% 
+  summarise(avg_length = mean(sepal_length))
+temp %>% filter(avg_length > 5.0)
+```
+
+```sql
+WITH species_avg AS (
+    SELECT 
+        species,
+        AVG(sepal_length) as avg_sepal_length
+    FROM iris 
+    GROUP BY species
+)
+SELECT * 
+FROM species_avg 
+WHERE avg_sepal_length > 5.0;
+```
+
+## Window Functions
+
+Group operations without collapsing rows
+
+**R:**
+
+```r
+iris %>% 
+  group_by(species) %>% 
+  mutate(rank_within_species = row_number(desc(sepal_length)))
+```
+
+```sql
+SELECT *,
+    ROW_NUMBER() OVER (PARTITION BY species ORDER BY sepal_length DESC) as rank_within_species,
+    AVG(sepal_length) OVER (PARTITION BY species) as species_avg_sepal_length
+FROM iris
+ORDER BY species, rank_within_species;
+```

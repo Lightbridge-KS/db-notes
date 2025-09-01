@@ -1,0 +1,4 @@
+- source: project
+  netlify:
+    - id: 275c71ab-33b6-43cc-a18f-da91be502f89
+      url: https://jazzy-pavlova-752500.netlify.app

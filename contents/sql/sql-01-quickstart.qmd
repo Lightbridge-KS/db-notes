@@ -1,0 +1,143 @@
+# SQL QuickStart
+
+Given your strong background in R and the tidyverse, learning SQL will feel quite natural since many concepts translate directly. The core difference is that SQL operates on tables (relations) in databases, while R typically works with data frames in memory.
+
+Let me start by showing you how SQL's fundamental operations map to tidyverse functions you already know:
+
+```
+R tidyverse          SQL equivalent
+─────────────        ──────────────
+select()         →   SELECT
+filter()         →   WHERE  
+arrange()        →   ORDER BY
+mutate()         →   SELECT (with expressions)
+summarise()      →   SELECT (with aggregate functions)
+group_by()       →   GROUP BY
+left_join()      →   LEFT JOIN
+```
+
+## Basic SQL Structure
+
+Every SQL query follows this basic pattern, which you can think of as a pipeline similar to R's %>% operator:
+
+```sql
+SELECT column1, column2          -- What columns do you want? (like select())
+FROM table_name                  -- Which table? (your data source)
+WHERE condition                  -- Filter rows (like filter())
+GROUP BY column                  -- Group data (like group_by())
+HAVING group_condition           -- Filter groups (like filter() after summarise())
+ORDER BY column                  -- Sort results (like arrange())
+LIMIT n;                         -- Take first n rows (like slice_head())
+```
+
+## Your First SQL Queries
+
+Let's say we have a patients table. Here's how basic operations compare:
+
+**Selecting columns** (like `select()`):
+```sql
+-- Get specific columns
+SELECT patient_id, age, diagnosis 
+FROM patients;
+
+-- Get all columns (equivalent to no select() in R)
+SELECT * 
+FROM patients;
+```
+
+**Filtering rows** (like `filter()`):
+```sql
+-- Single condition
+SELECT * 
+FROM patients 
+WHERE age > 65;
+
+-- Multiple conditions (like filter(age > 65, diagnosis == "pneumonia"))
+SELECT * 
+FROM patients 
+WHERE age > 65 AND diagnosis = 'pneumonia';
+```
+
+Notice that SQL uses `=` for equality (not `==` like R) and single quotes for strings.
+
+**Creating new columns** (like `mutate()`):
+```sql
+-- Create calculated columns
+SELECT patient_id, 
+       age,
+       age * 365 AS age_in_days,     -- New calculated column
+       CASE 
+         WHEN age >= 65 THEN 'Senior'
+         ELSE 'Adult'
+       END AS age_group              -- Conditional column (like ifelse)
+FROM patients;
+```
+
+The `CASE WHEN` statement is SQL's version of R's `ifelse()` or `case_when()`.
+
+## Sorting and Limiting
+
+**Arranging data** (like `arrange()`):
+```sql
+-- Sort by age ascending (default)
+SELECT * FROM patients ORDER BY age;
+
+-- Sort by age descending (like arrange(desc(age)))
+SELECT * FROM patients ORDER BY age DESC;
+
+-- Multiple sort columns
+SELECT * FROM patients ORDER BY diagnosis, age DESC;
+```
+
+**Taking specific rows**:
+```sql
+-- Get first 10 rows (like slice_head(n = 10))
+SELECT * FROM patients LIMIT 10;
+
+-- Skip first 10, then take next 10 (like slice(11:20))
+SELECT * FROM patients LIMIT 10 OFFSET 10;
+```
+
+## Aggregation
+
+This is where SQL really shines and maps closely to your `group_by() %>% summarise()` workflow:
+
+```sql
+-- Count patients by diagnosis (like count())
+SELECT diagnosis, COUNT(*) as patient_count
+FROM patients 
+GROUP BY diagnosis;
+
+-- Multiple summary statistics (like summarise())
+SELECT diagnosis,
+       COUNT(*) as patient_count,
+       AVG(age) as avg_age,
+       MIN(age) as min_age,
+       MAX(age) as max_age
+FROM patients 
+GROUP BY diagnosis;
+
+-- Filter groups (like filter() after summarise())
+SELECT diagnosis, COUNT(*) as patient_count
+FROM patients 
+GROUP BY diagnosis 
+HAVING COUNT(*) > 100;  -- Only diagnoses with >100 patients
+```
+
+The key insight is that `HAVING` filters groups (after `GROUP BY`), while `WHERE` filters individual rows (before grouping).
+
+## Data Types
+
+SQL has specific data types that are important for medical data:
+
+```
+INTEGER          -- Whole numbers (patient_id, age)
+DECIMAL(10,2)    -- Numbers with decimals (weight: 10 digits, 2 after decimal)
+VARCHAR(100)     -- Variable-length text up to 100 characters
+TEXT             -- Long text (clinical notes)
+DATE             -- Dates only (2024-01-15)
+TIMESTAMP        -- Date and time (2024-01-15 14:30:00)
+BOOLEAN          -- TRUE/FALSE values
+```
+
+Now, let me ask you a thinking question: In R, when you chain operations with `%>%`, you're building a pipeline step by step. How do you think SQL processes a query with multiple clauses like `WHERE`, `GROUP BY`, and `HAVING`? 

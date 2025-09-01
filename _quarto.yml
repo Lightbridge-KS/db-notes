@@ -1,0 +1,33 @@
+project:
+  type: book
+
+book:
+  title: "Database Notes"
+  author: "Kittipos Sirivongrungsone"
+  date: today
+  repo-url: https://github.com/Lightbridge-KS/db-notes
+  site-url: https://db-notes-lightbridge.netlify.app
+  chapters:
+    - index.qmd
+    - part: SQL
+      chapters: 
+        - "contents/sql/sql-01-quickstart.qmd"
+        - "contents/sql/sql-02-query.qmd"
+
+
+bibliography: references.bib
+
+format:
+  html:
+    theme:
+      light:
+      - cosmo
+      - brand
+      dark: 
+      - darkly
+    toc-depth: 4
+
+
+freeze: auto
+
+
