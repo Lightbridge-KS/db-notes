@@ -1,0 +1,325 @@
+# Basic SQL Query (MS SQL Server)
+
+Basic SQL Queries for Iris Dataset - MS SQL Server Syntax
+
+## Select
+
+`dplyr::select`
+
+**R:** 
+
+```r
+iris %>% select(species, sepal_length, sepal_width)
+```
+
+```sql
+SELECT TOP 10 species, sepal_length, sepal_width 
+FROM iris;
+```
+
+## Where
+
+`dplyr::filter`
+
+**R:**
+
+```r
+iris %>% filter(species == 'setosa')
+```
+
+```sql
+SELECT * 
+FROM iris 
+WHERE species = 'setosa';
+```
+
+## Multiple Conditions
+
+**R:**
+
+```r
+iris %>% filter(species == 'setosa', sepal_length > 5.0)
+```
+
+```sql
+SELECT * 
+FROM iris 
+WHERE species = 'setosa' AND sepal_length > 5.0;
+```
+
+## Order By
+
+`dplyr::arrange`
+
+**R:**
+
+```r
+iris %>% arrange(desc(sepal_length))
+```
+
+```sql
+SELECT * 
+FROM iris 
+ORDER BY sepal_length DESC;
+```
+
+## Group By + Aggregation
+
+`dplyr::group_by` + `summarise`
+
+**R:**
+
+```r
+iris %>% group_by(species) %>% summarise(avg_length = mean(sepal_length))
+```
+
+```sql
+SELECT 
+    species,
+    COUNT(*) as count,
+    AVG(sepal_length) as avg_sepal_length,
+    MIN(sepal_length) as min_sepal_length,
+    MAX(sepal_length) as max_sepal_length
+FROM iris 
+GROUP BY species;
+```
+
+## Count(*) vs Count(column)
+
+Great question! The `*` in `COUNT(*)` has a specific meaning in SQL:
+
+```sql
+COUNT(*)           -- Counts ALL rows in each group
+COUNT(column_name) -- Counts NON-NULL values in that column
+```
+
+Let's say you have this data:
+```
+species    | sepal_length
+-----------|-------------
+setosa     | 5.1
+setosa     | NULL
+setosa     | 4.9
+versicolor | 7.0
+versicolor | 6.4
+```
+
+Different COUNT results:
+
+```sql
+-- This counts ALL rows (including NULLs)
+COUNT(*) 
+-- setosa: 3 rows, versicolor: 2 rows
+
+-- This counts only NON-NULL values in sepal_length
+COUNT(sepal_length)
+-- setosa: 2 rows (NULL excluded), versicolor: 2 rows
+```
+
+
+**R tidyverse Equivalent**
+
+```r
+# SQL: COUNT(*)
+iris %>% 
+  group_by(species) %>% 
+  summarise(count = n())         # n() counts all rows
+
+# SQL: COUNT(column) 
+iris %>% 
+  group_by(species) %>% 
+  summarise(count = sum(!is.na(sepal_length)))  # counts non-NA values
+```
+
+**Best Practice**
+
+- Use `COUNT(*)` when you want to count **total rows** in each group
+- Use `COUNT(column)` when you want to count **non-missing values** for that specific column
+- For iris dataset (no missing data), both are equivalent, but `COUNT(*)` is more common and slightly faster
+
+## Having
+
+Post-aggregation filter
+
+**R:**
+
+```r
+iris %>% 
+  group_by(species) %>% 
+  summarise(avg_length = mean(sepal_length)) %>% 
+  filter(avg_length > 5.5)
+```
+
+```sql
+SELECT 
+    species,
+    AVG(sepal_length) as avg_sepal_length
+FROM iris 
+GROUP BY species
+HAVING AVG(sepal_length) > 5.5;
+```
+
+## Creating New Columns
+
+`dplyr::mutate`
+
+**R:**
+
+```r
+iris %>% mutate(sepal_ratio = sepal_length / sepal_width)
+```
+
+```sql
+SELECT *,
+    sepal_length / sepal_width as sepal_ratio,
+    CASE 
+        WHEN sepal_length > 6.0 THEN 'Large'
+        WHEN sepal_length > 4.5 THEN 'Medium' 
+        ELSE 'Small' 
+    END as size_category
+FROM iris;
+```
+
+## Subqueries
+
+Nested operations
+
+**R:**
+
+```r
+iris %>% filter(sepal_length > mean(sepal_length))
+```
+
+```sql
+SELECT * 
+FROM iris 
+WHERE sepal_length > (
+    SELECT AVG(sepal_length) FROM iris
+);
+```
+
+## Common Table Expressions (CTE)
+
+Creating intermediate datasets
+
+**R:**
+
+```r
+temp <- iris %>% 
+  group_by(species) %>% 
+  summarise(avg_length = mean(sepal_length))
+temp %>% filter(avg_length > 5.0)
+```
+
+```sql
+WITH species_avg AS (
+    SELECT 
+        species,
+        AVG(sepal_length) as avg_sepal_length
+    FROM iris 
+    GROUP BY species
+)
+SELECT * 
+FROM species_avg 
+WHERE avg_sepal_length > 5.0;
+```
+
+## Window Functions
+
+Group operations without collapsing rows
+
+**R:**
+
+```r
+iris %>% 
+  group_by(species) %>% 
+  mutate(rank_within_species = row_number(desc(sepal_length)))
+```
+
+```sql
+SELECT *,
+    ROW_NUMBER() OVER (PARTITION BY species ORDER BY sepal_length DESC) as rank_within_species,
+    AVG(sepal_length) OVER (PARTITION BY species) as species_avg_sepal_length
+FROM iris
+ORDER BY species, rank_within_species;
+```
+
+## MS SQL Server Specific Features
+
+### Pagination with OFFSET/FETCH
+
+Modern pagination (SQL Server 2012+)
+
+**R:**
+
+```r
+iris %>% slice(11:20)  # rows 11-20
+```
+
+```sql
+SELECT * 
+FROM iris 
+ORDER BY species, sepal_length
+OFFSET 10 ROWS FETCH NEXT 10 ROWS ONLY;
+```
+
+### String Operations
+
+**R:**
+
+```r
+iris %>% mutate(species_label = paste0(species, "_flower"))
+```
+
+```sql
+-- SQL Server 2012+ CONCAT function
+SELECT *,
+    CONCAT(species, '_flower') as species_label
+FROM iris;
+
+-- Traditional concatenation
+SELECT *,
+    species + '_flower' as species_label
+FROM iris;
+```
+
+### Data Type Conversion
+
+**R:**
+
+```r
+iris %>% mutate(length_text = as.character(sepal_length))
+```
+
+```sql
+SELECT *,
+    CAST(sepal_length AS VARCHAR(10)) as length_text,
+    CAST(sepal_length AS NVARCHAR(10)) as length_unicode_text
+FROM iris;
+```
+
+### Date Functions
+
+```sql
+-- Current date/time functions
+SELECT 
+    GETDATE() as current_datetime,
+    GETUTCDATE() as current_utc,
+    SYSDATETIME() as high_precision_datetime,
+    FORMAT(GETDATE(), 'yyyy-MM-dd') as formatted_date;
+```
+
+### Boolean Logic
+
+**R:**
+
+```r
+iris %>% mutate(is_large = sepal_length > 6.0)
+```
+
+```sql
+SELECT *,
+    CASE WHEN sepal_length > 6.0 THEN 1 ELSE 0 END as is_large,
+    CASE WHEN sepal_length > 6.0 THEN 'TRUE' ELSE 'FALSE' END as is_large_text
+FROM iris;
+```

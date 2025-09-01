@@ -1,7 +1,6 @@
-# Basic SQL Query
+# Basic SQL Query (SQLite)
 
-Basic SQL Queries for Iris Dataset
-(R tidyverse equivalents in comments)
+Basic SQLite SQL Queries for Iris Dataset
 
 ## Select
 
