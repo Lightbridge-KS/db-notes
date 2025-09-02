@@ -9,6 +9,10 @@ book:
   site-url: https://db-notes-lightbridge.netlify.app
   chapters:
     - index.qmd
+    - part: DB
+      chapters: 
+        - "contents/concept/db-01-organization.qmd"
+        - "contents/concept/db-02-mssql-server.qmd"
     - part: SQL
       chapters: 
         - "contents/sql/sql-01-quickstart.qmd"

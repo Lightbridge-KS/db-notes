@@ -1,0 +1,67 @@
+# MS SQL Server
+
+Let me walk you through how MS SQL Server and SQLite organize their data differently, building from your existing understanding of database hierarchy.
+
+## MS SQL Server: Enterprise Architecture
+
+MS SQL Server follows the full hierarchical model I described earlier, but with some specific characteristics that make it quite robust for enterprise environments.
+
+```
+SQL SERVER INSTANCE (Server Level)
+├── master (system database)
+├── tempdb (system database) 
+├── model (system database)
+├── msdb (system database)
+├── HospitalDB (your database)
+│   ├── dbo (default schema)
+│   │   ├── patients (table)
+│   │   ├── scans (table)
+│   │   └── diagnoses (table)
+│   ├── radiology (custom schema)
+│   │   ├── imaging_studies (table)
+│   │   └── equipment (table)
+│   └── admin (custom schema)
+│       └── staff (table)
+└── ResearchDB (another database)
+    └── dbo
+        └── study_data (table)
+```
+
+Think of SQL Server like having multiple R projects running simultaneously on a powerful server, where each project can have its own organized folder structure (schemas) and each folder contains related datasets (tables).
+
+SQL Server includes several system databases that handle metadata, temporary operations, and administration. This is similar to how R has hidden objects like `.GlobalEnv` that manage your session, but much more sophisticated.
+
+## SQLite: Minimalist Single-File Approach
+
+SQLite takes a completely different approach. It's designed for simplicity and portability, which makes it perfect for development, small applications, or embedded systems.
+
+```
+single_database.db (just one file!)
+├── patients (table) 
+├── scans (table)
+├── diagnoses (table)
+├── imaging_studies (table)
+└── equipment (table)
+```
+
+SQLite is like having one single RData file that contains all your tibbles. There's no server, no multiple databases, and no schemas in the traditional sense. Everything lives in one portable file that you can copy, email, or version control just like any other file.
+
+## Key Architectural Differences
+
+**Server vs File-Based Storage:**
+SQL Server requires a running database service (like having RStudio Server running continuously), while SQLite is just a file you open when needed (like opening an individual RData file in your local RStudio).
+
+**Concurrency Handling:**
+SQL Server can handle thousands of simultaneous users accessing different databases and tables, with sophisticated locking mechanisms. SQLite handles multiple readers well, but only one writer at a time. Think of SQL Server as a busy hospital lab where many technicians can work on different samples simultaneously, while SQLite is more like your personal research notebook that only you typically access.
+
+**Schema Organization:**
+SQL Server's schema system lets you organize tables logically within a database. For example, you might have `radiology.patient_scans` and `cardiology.patient_scans` as separate tables with similar structures but different purposes. SQLite doesn't have schemas, so you'd need to use naming conventions like `radiology_patient_scans` and `cardiology_patient_scans`.
+
+**Resource Requirements:**
+SQL Server needs significant system resources and ongoing maintenance, similar to maintaining a complex R Shiny server application. SQLite requires virtually no setup and minimal resources, more like using base R functions.
+
+## When Would You Choose Each?
+
+For your radiology AI work, you might use SQL Server when building production systems that multiple researchers and clinicians access simultaneously, especially when dealing with large imaging datasets and complex permissions. SQLite would be excellent for prototyping, personal research projects, or when you need to package data with your R analysis scripts for reproducible research.
+
+This architectural difference fundamentally changes how you design your applications and manage your data. Would you like me to explore how these differences affect your day-to-day SQL queries, or shall we dive into how you'd set up a simple database in each system?

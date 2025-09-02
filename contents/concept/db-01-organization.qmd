@@ -1,0 +1,77 @@
+# DB Org
+
+## Overview
+
+Given your strong tidyverse background, I'll explain relational database organization by drawing parallels to R concepts you already know.
+
+### Database Hierarchy (Larger → Smaller)
+
+```
+DATABASE SERVER
+├── Database 1 (like a project workspace)
+│   ├── Schema A (namespace/grouping)
+│   │   ├── Table 1 (like a tibble/data.frame)
+│   │   │   ├── Column 1 (like a variable/vector)
+│   │   │   ├── Column 2
+│   │   │   └── Column 3
+│   │   │   └── Rows (like observations)
+│   │   └── Table 2
+│   └── Schema B
+│       └── Table 3
+├── Database 2
+└── Database 3
+```
+
+### Detailed Breakdown
+
+**1. Database Server/Instance** (Largest)
+- The entire database management system (like your entire R environment)
+- Houses multiple databases
+
+**2. Database/Catalog**
+- Think of this as an R project or workspace
+- Contains all related tables for a specific application/domain
+- Example: `hospital_radiology_db`, `research_db`
+
+**3. Schema** 
+- Logical grouping within a database (namespace)
+- Like organizing your R objects into different environments
+- Examples: `patient_data`, `imaging_studies`, `admin`
+- *Note: MySQL doesn't have schemas (database = schema), but PostgreSQL does*
+
+**4. Table** (Your familiar territory!)
+- Equivalent to R's `data.frame` or `tibble`
+- Structured data in rows and columns
+- Example: `patient_table`, `scan_results`
+
+**5. Column/Field**
+- Like variables in your R data.frame
+- Each column has a specific data type (INTEGER, VARCHAR, DATE, etc.)
+- Example: `patient_id`, `scan_date`, `diagnosis`
+
+**6. Row/Record** (Smallest)
+- Individual observations (like rows in your tibble)
+- Each row represents one entity/observation
+
+### R Tidyverse Analogy
+
+```r
+# Think of it this way:
+hospital_db <- list(  # Database
+  radiology = list(   # Schema
+    patients = tibble(patient_id = 1:100, name = ...), # Table
+    scans = tibble(scan_id = 1:500, patient_id = ...)  # Table
+  ),
+  admin = list(       # Schema
+    staff = tibble(staff_id = 1:50, department = ...)  # Table
+  )
+)
+```
+
+This hierarchical organization helps with:
+- **Data organization** (like your tidyverse project structure)
+- **Access control** (permissions at different levels)
+- **Performance** (indexing and optimization)
+- **Maintenance** (backup, replication)
+
+Would you like me to dive deeper into any specific level, or shall we move on to how tables relate to each other (relationships/joins)?
