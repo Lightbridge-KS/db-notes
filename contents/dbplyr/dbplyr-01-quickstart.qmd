@@ -1,0 +1,134 @@
+# dbplyr - Get Started
+
+## dbplyr Quick Start Guide
+
+### Core Concept
+```
+Your R Code (dplyr) → dbplyr translation → SQL → Database → Results back to R
+     |                                     |
+   [Familiar]                        [Optimized]
+```
+
+### 1. Setup & Connection
+
+```r
+library(DBI)
+library(dbplyr)
+library(dplyr)
+
+# Connect to PostgreSQL
+con <- DBI::dbConnect(
+  RPostgres::Postgres(),
+  host = "localhost",
+  dbname = "your_db",
+  user = "your_user",
+  password = "your_password"
+)
+```
+
+### 2. Create Database Table References
+
+```r
+# Instead of reading data into R memory:
+# df <- read_csv("patients.csv")
+
+# You create a reference to the database table:
+patients_tbl <- tbl(con, "patients")
+studies_tbl <- tbl(con, "studies")
+```
+
+### 3. Use Familiar dplyr Syntax
+
+```r
+# This looks exactly like normal dplyr!
+result <- patients_tbl %>%
+  filter(age >= 18, department == "radiology") %>%
+  select(patient_id, age, study_date) %>%
+  arrange(desc(study_date)) %>%
+  head(100)
+
+# Key difference: No computation happens yet! (lazy evaluation)
+```
+
+### 4. Execute Queries
+
+```r
+# Method 1: collect() - brings data to R
+actual_data <- result %>% collect()
+
+# Method 2: show_query() - see the generated SQL
+result %>% show_query()
+
+# Method 3: compute() - create temp table in database
+temp_result <- result %>% compute()
+```
+
+### 5. SQL Translation Examples
+
+```
+# dplyr                    →  SQL
+filter(age > 30)          →  WHERE age > 30
+select(id, name)          →  SELECT id, name  
+group_by(dept)            →  GROUP BY dept
+summarise(avg_age = mean(age)) → SELECT AVG(age) as avg_age
+left_join(studies, by="id") → LEFT JOIN studies ON ...
+```
+
+### 6. Practical Workflow Pattern
+
+```r
+# 1. Explore structure (without loading data)
+patients_tbl %>% glimpse()
+
+# 2. Build query step by step
+query <- patients_tbl %>%
+  filter(modality == "CT") %>%
+  mutate(age_group = case_when(
+    age < 18 ~ "pediatric",
+    age >= 65 ~ "elderly", 
+    TRUE ~ "adult"
+  )) %>%
+  group_by(age_group) %>%
+  summarise(
+    count = n(),
+    avg_age = mean(age, na.rm = TRUE)
+  )
+
+# 3. Check the SQL (optional)
+query %>% show_query()
+
+# 4. Execute and collect results
+results <- query %>% collect()
+```
+
+### 7. Key Advantages for You
+
+**Memory Efficient**: Perfect for large radiology datasets
+```
+Traditional R: Load 10GB → Process → OOM Error
+dbplyr: Process in DB → Load only results (maybe 100KB)
+```
+
+**Performance**: Database optimizations
+```
+R Processing:     [Load] → [Filter] → [Group] → [Summarize]
+Database:         [Optimized Pipeline in One Step]
+```
+
+### 8. Common Gotchas
+
+```r
+# ❌ This won't work (R functions not available in SQL)
+patients_tbl %>% 
+  mutate(processed_date = lubridate::today())
+
+# ✅ Use SQL-compatible functions
+patients_tbl %>% 
+  mutate(processed_date = Sys.Date()) # or SQL functions
+```
+
+### 9. Disconnect When Done
+
+```r
+DBI::dbDisconnect(con)
+```

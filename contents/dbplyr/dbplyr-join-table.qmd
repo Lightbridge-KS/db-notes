@@ -1,0 +1,200 @@
+# dbplyr - Join Table
+
+
+Perfect! Let me show you table joins with primary-foreign key relationships using `dbplyr`. I'll use radiology-relevant examples since that's your domain.
+
+## Table Joins in dbplyr
+
+### Typical Radiology Database Schema
+
+```
+patients                    studies                     series
+┌─────────────┐            ┌─────────────────┐          ┌─────────────────┐
+│ patient_id  │◄───────────┤ patient_id (FK) │          │ study_id (FK)   │
+│ name        │            │ study_id        │◄─────────┤ series_id       │
+│ birth_date  │            │ study_date      │          │ modality        │
+│ gender      │            │ modality        │          │ series_number   │
+└─────────────┘            │ study_desc      │          │ image_count     │
+     (PK)                  └─────────────────┘          └─────────────────┘
+                                  (PK)                         (PK)
+```
+
+### Setup Example Tables
+
+```r
+library(DBI)
+library(dbplyr)
+library(dplyr)
+
+# Connect to your PostgreSQL
+con <- DBI::dbConnect(RPostgres::Postgres(), ...)
+
+# Create table references
+patients_tbl <- tbl(con, "patients")
+studies_tbl <- tbl(con, "studies")
+series_tbl <- tbl(con, "series")
+```
+
+### 1. Basic Inner Join (Most Common)
+
+```r
+# Join patients with their studies
+patient_studies <- patients_tbl %>%
+  inner_join(studies_tbl, by = "patient_id") %>%
+  select(patient_id, name, birth_date, study_id, study_date, modality)
+
+# See the generated SQL
+patient_studies %>% show_query()
+# SELECT patients.patient_id, patients.name, patients.birth_date,
+#        studies.study_id, studies.study_date, studies.modality
+# FROM patients 
+# INNER JOIN studies ON patients.patient_id = studies.patient_id
+```
+
+### 2. Left Join (Keep All Patients)
+
+```r
+# Include patients even if they have no studies
+all_patients_studies <- patients_tbl %>%
+  left_join(studies_tbl, by = "patient_id") %>%
+  select(patient_id, name, study_id, study_date)
+
+# Useful for finding patients without studies
+patients_no_studies <- all_patients_studies %>%
+  filter(is.na(study_id)) %>%
+  collect()
+```
+
+### 3. Multiple Table Joins (Chain Joins)
+
+```r
+# Join patients → studies → series (3-table join)
+complete_data <- patients_tbl %>%
+  inner_join(studies_tbl, by = "patient_id") %>%
+  inner_join(series_tbl, by = "study_id") %>%
+  select(
+    patient_id, name, 
+    study_id, study_date, 
+    series_id, modality, image_count
+  )
+```
+
+### 4. Join with Different Column Names
+
+```r
+# If your FK has different name
+# e.g., studies table has 'pat_id' instead of 'patient_id'
+patient_studies <- patients_tbl %>%
+  inner_join(studies_tbl, by = c("patient_id" = "pat_id"))
+
+# Or using join_by() (newer syntax)
+patient_studies <- patients_tbl %>%
+  inner_join(studies_tbl, join_by(patient_id == pat_id))
+```
+
+### 5. Aggregated Joins (Very Useful!)
+
+```r
+# Count studies per patient
+study_counts <- patients_tbl %>%
+  left_join(studies_tbl, by = "patient_id") %>%
+  group_by(patient_id, name) %>%
+  summarise(
+    total_studies = n(),
+    first_study = min(study_date, na.rm = TRUE),
+    last_study = max(study_date, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Collect results
+results <- study_counts %>% collect()
+```
+
+### 6. Filtered Joins
+
+```r
+# Find patients with CT studies in the last 30 days
+recent_ct_patients <- patients_tbl %>%
+  inner_join(
+    studies_tbl %>% 
+      filter(
+        modality == "CT",
+        study_date >= (Sys.Date() - 30)
+      ), 
+    by = "patient_id"
+  ) %>%
+  distinct(patient_id, name)
+```
+
+### 7. Complex Join Example
+
+```r
+# Radiology workflow: Find patients with incomplete series
+incomplete_studies <- patients_tbl %>%
+  inner_join(studies_tbl, by = "patient_id") %>%
+  left_join(series_tbl, by = "study_id") %>%
+  group_by(patient_id, name, study_id, study_date) %>%
+  summarise(
+    total_series = n(),
+    complete_series = sum(!is.na(series_id)),
+    .groups = "drop"
+  ) %>%
+  filter(complete_series == 0) %>%  # Studies with no series
+  arrange(study_date)
+```
+
+### 8. Performance Tips
+
+```r
+# ✅ Good: Filter before joining (reduces data)
+filtered_join <- patients_tbl %>%
+  filter(birth_date >= "1980-01-01") %>%  # Filter first
+  inner_join(
+    studies_tbl %>% filter(modality == "MRI"),  # Filter this too
+    by = "patient_id"
+  )
+
+# ❌ Less efficient: Join then filter
+inefficient <- patients_tbl %>%
+  inner_join(studies_tbl, by = "patient_id") %>%
+  filter(birth_date >= "1980-01-01", modality == "MRI")
+```
+
+### 9. Check Your Joins
+
+```r
+# Before collecting, always check:
+your_join %>% 
+  summarise(total_rows = n()) %>%
+  collect()
+
+# And inspect the SQL:
+your_join %>% show_query()
+```
+
+### 10. Real-World Radiology Example
+
+```r
+# Monthly radiology report: Patient demographics by modality
+monthly_report <- patients_tbl %>%
+  inner_join(studies_tbl, by = "patient_id") %>%
+  filter(study_date >= "2024-01-01", study_date < "2024-02-01") %>%
+  mutate(age = as.integer((study_date - birth_date) / 365.25)) %>%
+  group_by(modality, gender) %>%
+  summarise(
+    patient_count = n_distinct(patient_id),
+    study_count = n(),
+    avg_age = round(mean(age, na.rm = TRUE), 1),
+    min_age = min(age, na.rm = TRUE),
+    max_age = max(age, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(modality, gender)
+
+# Execute and get results
+report_data <- monthly_report %>% collect()
+```
+
+The key advantage is that all this complex joining happens in the database using optimized SQL, and only the final results come back to R. Perfect for your large medical imaging datasets!
+
+Any specific join scenarios you'd like me to elaborate on?
