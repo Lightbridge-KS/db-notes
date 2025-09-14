@@ -18,6 +18,9 @@ book:
         - "contents/sql/sql-01-quickstart.qmd"
         - "contents/sql/sql-02-sqlite-query.qmd"
         - "contents/sql/sql-03-ms-sql-query.qmd"
+    - part: PostgreSQL
+      chapters: 
+        - "contents/postgresql/pgsql-01-organization.qmd"
     - part: dbplyr
       chapters: 
         - "contents/dbplyr/dbplyr-01-quickstart.qmd"
