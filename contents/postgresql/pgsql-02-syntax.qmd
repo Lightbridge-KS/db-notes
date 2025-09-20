@@ -1,0 +1,291 @@
+# PostgreSQL Syntax
+
+> PostgreSQL Basics with Palmer Penguins Dataset
+
+## Palmer Penguins
+
+### What is PostgreSQL?
+
+PostgreSQL is a powerful, open-source relational database management system (RDBMS). Think of it as a structured way to store and query data, similar to how you might use data frames in R or pandas in Python, but optimized for larger datasets and concurrent access.
+
+```
+┌─────────────────────────────────────┐
+│            PostgreSQL               │
+│  ┌─────────┐  ┌─────────┐          │
+│  │ Table 1 │  │ Table 2 │   ...    │
+│  │ (rows × │  │ (rows × │          │
+│  │ columns)│  │ columns)│          │
+│  └─────────┘  └─────────┘          │
+└─────────────────────────────────────┘
+```
+
+### Palmer Penguins Dataset Overview
+
+The palmer penguins dataset contains data about 3 penguin species from 3 islands in Antarctica:
+
+```
+Species: Adelie, Chinstrap, Gentoo
+Islands: Biscoe, Dream, Torgersen
+Measurements: bill_length_mm, bill_depth_mm, flipper_length_mm, body_mass_g
+```
+
+### Creating the Penguins Table
+
+First, let's create a table structure that matches the palmer penguins dataset:
+
+```sql
+-- Create the penguins table
+CREATE TABLE penguins (
+    id SERIAL PRIMARY KEY,
+    species VARCHAR(50) NOT NULL,
+    island VARCHAR(50) NOT NULL,
+    bill_length_mm NUMERIC(5,2),
+    bill_depth_mm NUMERIC(5,2),
+    flipper_length_mm INTEGER,
+    body_mass_g INTEGER,
+    sex VARCHAR(10),
+    year INTEGER
+);
+```
+
+### Key PostgreSQL Data Types:
+
+- `SERIAL`: Auto-incrementing integer (like row numbers)
+- `VARCHAR(n)`: Variable-length text (max n characters)
+- `NUMERIC(p,s)`: Decimal numbers (p digits total, s after decimal)
+- `INTEGER`: Whole numbers
+- `PRIMARY KEY`: Unique identifier for each row
+
+### Inserting Sample Data
+
+```sql
+-- Insert sample penguin data
+INSERT INTO penguins (species, island, bill_length_mm, bill_depth_mm, 
+                     flipper_length_mm, body_mass_g, sex, year)
+VALUES 
+    ('Adelie', 'Torgersen', 39.1, 18.7, 181, 3750, 'male', 2007),
+    ('Adelie', 'Torgersen', 39.5, 17.4, 186, 3800, 'female', 2007),
+    ('Adelie', 'Torgersen', 40.3, 18.0, 195, 3250, 'female', 2007),
+    ('Adelie', 'Biscoe', 36.7, 19.3, 193, 3450, 'female', 2007),
+    ('Chinstrap', 'Dream', 46.5, 17.9, 192, 3500, 'female', 2007),
+    ('Chinstrap', 'Dream', 50.0, 19.5, 196, 3900, 'male', 2007),
+    ('Gentoo', 'Biscoe', 46.1, 13.2, 211, 4500, 'female', 2007),
+    ('Gentoo', 'Biscoe', 47.8, 15.0, 215, 5700, 'male', 2007);
+```
+
+### Basic SELECT Queries
+
+#### Simple Selection
+
+```sql
+-- View all data
+SELECT * FROM penguins;
+
+-- Select specific columns
+SELECT species, island, body_mass_g FROM penguins;
+
+-- Count total penguins
+SELECT COUNT(*) FROM penguins;
+```
+
+#### Filtering with WHERE
+
+```sql
+-- Penguins from a specific island
+SELECT * FROM penguins WHERE island = 'Torgersen';
+
+-- Large penguins (body mass > 4000g)
+SELECT species, body_mass_g 
+FROM penguins 
+WHERE body_mass_g > 4000;
+
+-- Adelie penguins that are male
+SELECT * FROM penguins 
+WHERE species = 'Adelie' AND sex = 'male';
+```
+
+#### Sorting with ORDER BY
+
+```sql
+-- Sort by body mass (ascending)
+SELECT species, body_mass_g 
+FROM penguins 
+ORDER BY body_mass_g;
+
+-- Sort by body mass (descending)
+SELECT species, body_mass_g 
+FROM penguins 
+ORDER BY body_mass_g DESC;
+
+-- Sort by species, then by body mass
+SELECT species, island, body_mass_g 
+FROM penguins 
+ORDER BY species, body_mass_g DESC;
+```
+
+###  Aggregation Functions
+
+#### Basic Statistics
+
+```sql
+-- Average body mass by species
+SELECT species, AVG(body_mass_g) as avg_mass
+FROM penguins 
+GROUP BY species;
+
+-- Count penguins by species and island
+SELECT species, island, COUNT(*) as penguin_count
+FROM penguins 
+GROUP BY species, island
+ORDER BY species, island;
+
+-- Min, Max, Average bill length by species
+SELECT 
+    species,
+    MIN(bill_length_mm) as min_bill,
+    MAX(bill_length_mm) as max_bill,
+    AVG(bill_length_mm) as avg_bill
+FROM penguins 
+GROUP BY species;
+```
+
+#### Filtering Groups with HAVING
+
+```sql
+-- Species with average body mass > 4000g
+SELECT species, AVG(body_mass_g) as avg_mass
+FROM penguins 
+GROUP BY species
+HAVING AVG(body_mass_g) > 4000;
+```
+
+### Useful String Functions
+
+```sql
+-- Convert species to uppercase
+SELECT UPPER(species) as species_upper, island 
+FROM penguins;
+
+-- Concatenate species and island
+SELECT CONCAT(species, ' from ', island) as description
+FROM penguins;
+
+-- Filter using pattern matching
+SELECT * FROM penguins 
+WHERE species LIKE 'A%';  -- Species starting with 'A'
+```
+
+### Handling NULL Values
+
+```sql
+-- Find records with missing bill length
+SELECT * FROM penguins 
+WHERE bill_length_mm IS NULL;
+
+-- Count non-null values
+SELECT COUNT(bill_length_mm) as non_null_bills
+FROM penguins;
+
+-- Replace NULL with default value
+SELECT 
+    species,
+    COALESCE(bill_length_mm, 0) as bill_length_clean
+FROM penguins;
+```
+
+### Advanced Queries
+
+#### Subqueries
+
+```sql
+-- Penguins heavier than the average
+SELECT * FROM penguins 
+WHERE body_mass_g > (
+    SELECT AVG(body_mass_g) FROM penguins
+);
+```
+
+#### Window Functions
+
+```sql
+-- Rank penguins by body mass within each species
+SELECT 
+    species,
+    body_mass_g,
+    RANK() OVER (PARTITION BY species ORDER BY body_mass_g DESC) as rank_in_species
+FROM penguins;
+```
+
+#### CASE Statements
+
+```sql
+-- Categorize penguin size
+SELECT 
+    species,
+    body_mass_g,
+    CASE 
+        WHEN body_mass_g < 3500 THEN 'Small'
+        WHEN body_mass_g < 4500 THEN 'Medium'
+        ELSE 'Large'
+    END as size_category
+FROM penguins;
+```
+
+### Connecting from Python
+
+Here's how you can connect to PostgreSQL from Python using psycopg2:
+
+```python
+import psycopg2
+import pandas as pd
+
+# Connect to PostgreSQL
+conn = psycopg2.connect(
+    host="localhost",
+    database="your_database",
+    user="your_username",
+    password="your_password"
+)
+
+# Query data into pandas DataFrame
+query = """
+SELECT species, island, AVG(body_mass_g) as avg_mass
+FROM penguins 
+GROUP BY species, island
+ORDER BY species, island;
+"""
+
+df = pd.read_sql(query, conn)
+print(df)
+
+# Close connection
+conn.close()
+```
+
+### Common PostgreSQL vs R/Python Equivalents
+
+| Task | R (dplyr) | Python (pandas) | PostgreSQL |
+|------|-----------|-----------------|------------|
+| Filter rows | `filter(df, condition)` | `df[condition]` | `WHERE condition` |
+| Select columns | `select(df, col1, col2)` | `df[['col1', 'col2']]` | `SELECT col1, col2` |
+| Group by | `group_by(df, col)` | `df.groupby('col')` | `GROUP BY col` |
+| Sort | `arrange(df, col)` | `df.sort_values('col')` | `ORDER BY col` |
+| Count | `count(df)` | `len(df)` | `COUNT(*)` |
+
+### Practice Exercises
+
+Try these queries with the penguins dataset:
+
+1. Find the heaviest penguin of each species
+2. Calculate the bill length to depth ratio for each penguin
+3. Find islands that have more than one penguin species
+4. Create a summary showing min, max, and average measurements by species
+5. Find penguins whose flipper length is above the 75th percentile
+
+### Next Steps
+
+- Learn about **JOINS** to combine multiple tables
+- Explore **indexes** for query performance
+- Study **views** to save complex queries
+- Learn about **transactions** for data consistency
+- Practice with **stored procedures** and **functions**

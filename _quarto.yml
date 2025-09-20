@@ -21,6 +21,7 @@ book:
     - part: PostgreSQL
       chapters: 
         - "contents/postgresql/pgsql-01-organization.qmd"
+        - "contents/postgresql/pgsql-02-syntax.qmd"
     - part: dbplyr
       chapters: 
         - "contents/dbplyr/dbplyr-01-quickstart.qmd"
