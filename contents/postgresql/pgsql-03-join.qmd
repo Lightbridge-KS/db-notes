@@ -1,0 +1,134 @@
+# SQL Joins in PostgreSQL
+
+Great question! Since you're familiar with R's dplyr, I'll map the `*_join()` functions to PostgreSQL syntax.
+
+## Basic Syntax Pattern
+
+```sql
+SELECT columns
+FROM left_table
+[JOIN_TYPE] right_table
+ON left_table.key = right_table.key;
+```
+
+## Join Type Mappings
+
+### 1. **`left_join()` → `LEFT JOIN`**
+```sql
+SELECT *
+FROM patients
+LEFT JOIN visits
+ON patients.patient_id = visits.patient_id;
+```
+- Keeps all rows from left table
+- Fills NULLs where right table has no match
+
+### 2. **`right_join()` → `RIGHT JOIN`**
+```sql
+SELECT *
+FROM patients
+RIGHT JOIN visits
+ON patients.patient_id = visits.patient_id;
+```
+- Keeps all rows from right table
+- Fills NULLs where left table has no match
+
+### 3. **`inner_join()` → `INNER JOIN`** (or just `JOIN`)
+```sql
+SELECT *
+FROM patients
+INNER JOIN visits
+ON patients.patient_id = visits.patient_id;
+```
+- Only rows with matches in both tables
+
+### 4. **`full_join()` → `FULL OUTER JOIN`**
+```sql
+SELECT *
+FROM patients
+FULL OUTER JOIN visits
+ON patients.patient_id = visits.patient_id;
+```
+- All rows from both tables
+- NULLs where no match exists
+
+### 5. **`anti_join()` → `LEFT JOIN ... WHERE ... IS NULL`**
+```sql
+SELECT patients.*
+FROM patients
+LEFT JOIN visits
+ON patients.patient_id = visits.patient_id
+WHERE visits.patient_id IS NULL;
+```
+- Rows in left table with NO match in right table
+
+### 6. **`semi_join()` → `WHERE EXISTS` or `INNER JOIN` + `DISTINCT`**
+```sql
+-- Method 1: Using EXISTS (more efficient)
+SELECT *
+FROM patients
+WHERE EXISTS (
+    SELECT 1
+    FROM visits
+    WHERE visits.patient_id = patients.patient_id
+);
+
+-- Method 2: Using INNER JOIN
+SELECT DISTINCT patients.*
+FROM patients
+INNER JOIN visits
+ON patients.patient_id = visits.patient_id;
+```
+- Rows in left table that HAVE a match in right table (but don't duplicate left rows)
+
+## Visual Representation
+
+```
+LEFT JOIN                 RIGHT JOIN
+┌─────┬─────┐            ┌─────┬─────┐
+│ ███ │     │            │     │ ███ │
+│ ███ │     │            │     │ ███ │
+└─────┴─────┘            └─────┴─────┘
+
+INNER JOIN               FULL OUTER JOIN
+┌─────┬─────┐            ┌─────┬─────┐
+│     │ █   │            │ ███ │ ███ │
+│     │ █   │            │ ███ │ ███ │
+└─────┴─────┘            └─────┴─────┘
+
+ANTI JOIN                SEMI JOIN
+┌─────┬─────┐            ┌─────┬─────┐
+│ █   │     │            │   █ │     │
+│ █   │     │            │   █ │     │
+└─────┴─────┘            └─────┴─────┘
+  Left  Right              Left  Right
+```
+
+## Multiple Conditions
+
+```sql
+-- dplyr: left_join(df1, df2, by = c("id", "date"))
+SELECT *
+FROM table1
+LEFT JOIN table2
+ON table1.id = table2.id 
+   AND table1.date = table2.date;
+```
+
+## Different Column Names
+
+```sql
+-- dplyr: left_join(df1, df2, by = c("patient_id" = "pat_id"))
+SELECT *
+FROM patients
+LEFT JOIN visits
+ON patients.patient_id = visits.pat_id;
+```
+
+## Key Differences to Note
+
+1. **Column selection**: SQL requires explicit `SELECT` - use `table_name.*` for all columns from one table
+2. **No automatic suffix**: Unlike dplyr's `.x`/`.y`, you must alias duplicate column names manually
+3. **Performance**: `semi_join()` with `EXISTS` is typically faster than `INNER JOIN + DISTINCT` for large tables
+
+Need examples with specific radiology data scenarios?
