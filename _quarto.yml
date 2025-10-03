@@ -22,6 +22,7 @@ book:
       chapters: 
         - "contents/postgresql/pgsql-01-organization.qmd"
         - "contents/postgresql/pgsql-02-syntax.qmd"
+        - "contents/postgresql/pgsql-03-count.qmd"
     - part: dbplyr
       chapters: 
         - "contents/dbplyr/dbplyr-01-quickstart.qmd"

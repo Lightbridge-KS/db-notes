@@ -1,0 +1,92 @@
+# Counting in PostgreSQL
+
+In PostgreSQL, you can replicate `dplyr::count()` behavior using `GROUP BY` with `COUNT()`. Here's how:
+
+## Basic Counting
+
+**R (dplyr)**
+```r
+df %>% count(column_name)
+```
+
+**PostgreSQL equivalent**
+```sql
+SELECT column_name, COUNT(*) AS n
+FROM table_name
+GROUP BY column_name
+ORDER BY n DESC;
+```
+
+## Multiple Grouping Variables
+
+**R (dplyr)**
+```r
+df %>% count(col1, col2)
+```
+
+**PostgreSQL**
+```sql
+SELECT col1, col2, COUNT(*) AS n
+FROM table_name
+GROUP BY col1, col2
+ORDER BY n DESC;
+```
+
+## Custom Column Name
+
+**R (dplyr)**
+```r
+df %>% count(column_name, name = "frequency")
+```
+
+**PostgreSQL**
+```sql
+SELECT column_name, COUNT(*) AS frequency
+FROM table_name
+GROUP BY column_name
+ORDER BY frequency DESC;
+```
+
+## Sorting Options
+
+By default, `dplyr::count()` sorts by count descending. In PostgreSQL:
+
+```sql
+-- Sort by count descending (default dplyr behavior)
+ORDER BY n DESC
+
+-- Sort by count ascending
+ORDER BY n ASC
+
+-- Sort by grouping variable
+ORDER BY column_name
+
+-- Don't sort (faster for large datasets)
+-- Just omit ORDER BY clause
+```
+
+## With Weighted Counts
+
+**R (dplyr)**
+```r
+df %>% count(column_name, wt = weight_column)
+```
+
+**PostgreSQL**
+```sql
+SELECT column_name, SUM(weight_column) AS n
+FROM table_name
+GROUP BY column_name
+ORDER BY n DESC;
+```
+
+## Key Differences
+
+```
+dplyr::count()              PostgreSQL
+─────────────────────────────────────────
+Automatic GROUP BY    →     Explicit GROUP BY required
+Returns tibble        →     Returns result set
+Auto-sorted DESC      →     Must specify ORDER BY
+Column name "n"       →     Must alias as "n" (or any name)
+```
