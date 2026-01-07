@@ -1,0 +1,158 @@
+---
+title: "SQL Export: A Crash Course"
+---
+
+SQL Export refers to extracting data **out of a database** into external formats (files, other systems). Here's the big picture:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        SQL EXPORT                                   │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   ┌──────────────┐                                                  │
+│   │   DATABASE   │                                                  │
+│   │  ┌────────┐  │                                                  │
+│   │  │ Tables │  │                                                  │
+│   │  └────────┘  │                                                  │
+│   └──────┬───────┘                                                  │
+│          │                                                          │
+│          ▼                                                          │
+│   ┌──────────────┐      ┌─────────────────────────────────────┐     │
+│   │  SQL Query   │ ───► │  Export Formats                     │     │
+│   │  or Command  │      │  • CSV / TSV (tabular)              │     │
+│   └──────────────┘      │  • JSON (structured)                │     │
+│                         │  • SQL dump (.sql schema + data)    │     │
+│                         │  • Excel (.xlsx)                    │     │
+│                         │  • Parquet (big data)               │     │
+│                         └─────────────────────────────────────┘     │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 1. Two Main Types of Export
+
+| Type | Purpose | Output |
+|------|---------|--------|
+| **Data Export** | Export query results (rows) | CSV, JSON, Excel |
+| **Database Dump** | Backup structure + data | `.sql` file with `CREATE` + `INSERT` statements |
+
+---
+
+## 2. Export by Database System
+
+### SQLite (Common for local/small projects)
+
+```bash
+# Export to CSV
+sqlite3 -header -csv mydb.db "SELECT * FROM patients;" > patients.csv
+
+# Full database dump (schema + data)
+sqlite3 mydb.db .dump > backup.sql
+```
+
+### PostgreSQL
+
+```bash
+# Export query to CSV
+psql -d mydb -c "COPY (SELECT * FROM patients) TO STDOUT WITH CSV HEADER" > patients.csv
+
+# Or using \copy (client-side, no superuser needed)
+psql -d mydb -c "\copy patients TO 'patients.csv' CSV HEADER"
+
+# Full dump
+pg_dump mydb > backup.sql
+```
+
+### MySQL
+
+```bash
+# Export to CSV (run inside MySQL or via -e flag)
+mysql -u user -p -e "SELECT * FROM patients INTO OUTFILE '/tmp/patients.csv' 
+  FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES TERMINATED BY '\n';" mydb
+
+# Full dump
+mysqldump -u user -p mydb > backup.sql
+```
+
+---
+
+## 3. Export via Python (Your Most Flexible Option)
+
+Since you use Python, this is often the cleanest approach:
+
+```python
+import sqlite3
+import pandas as pd
+
+# Connect
+conn = sqlite3.connect("mydb.db")
+
+# Query to DataFrame
+df = pd.read_sql_query("SELECT * FROM patients WHERE age > 30", conn)
+
+# Export to various formats
+df.to_csv("patients.csv", index=False)
+df.to_json("patients.json", orient="records")
+df.to_excel("patients.xlsx", index=False)
+df.to_parquet("patients.parquet")  # For big data
+
+conn.close()
+```
+
+**For PostgreSQL/MySQL**, just swap the connection:
+
+```python
+from sqlalchemy import create_engine
+
+# PostgreSQL
+engine = create_engine("postgresql://user:pass@localhost/mydb")
+
+# MySQL
+engine = create_engine("mysql+pymysql://user:pass@localhost/mydb")
+
+df = pd.read_sql_query("SELECT * FROM patients", engine)
+```
+
+---
+
+## 4. Export via R (Since you're advanced)
+
+```r
+library(DBI)
+library(readr)
+
+con <- dbConnect(RSQLite::SQLite(), "mydb.db")
+df <- dbGetQuery(con, "SELECT * FROM patients")
+
+write_csv(df, "patients.csv")
+dbDisconnect(con)
+```
+
+---
+
+## 5. Quick Reference Cheat Sheet
+
+```
+┌────────────────┬──────────────────────────────────────────────────┐
+│  Task          │  Command / Method                                │
+├────────────────┼──────────────────────────────────────────────────┤
+│ SQLite → CSV   │ sqlite3 -header -csv db.db "SELECT..." > out.csv │
+│ SQLite dump    │ sqlite3 db.db .dump > backup.sql                 │
+│ PostgreSQL CSV │ \copy (query) TO 'file.csv' CSV HEADER           │
+│ PostgreSQL dump│ pg_dump dbname > backup.sql                      │
+│ MySQL dump     │ mysqldump -u user -p dbname > backup.sql         │
+│ Python → CSV   │ pd.read_sql_query(...).to_csv(...)               │
+│ Python → JSON  │ df.to_json(..., orient="records")                │
+└────────────────┴──────────────────────────────────────────────────┘
+```
+
+---
+
+## Key Takeaways
+
+1. **For quick exports**: Use CLI tools (`sqlite3`, `psql`, `mysql`)
+2. **For flexibility/transformation**: Use Python + pandas
+3. **For backups**: Use dump commands (`pg_dump`, `mysqldump`, `.dump`)
+4. **CSV** is universal; **JSON** for nested/API data; **Parquet** for big data

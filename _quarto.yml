@@ -18,6 +18,8 @@ book:
         - "contents/sql/sql-01-quickstart.qmd"
         - "contents/sql/sql-02-sqlite-query.qmd"
         - "contents/sql/sql-03-ms-sql-query.qmd"
+        - text: SQL Export
+          href: "contents/export/sql-export.qmd"
     - part: PostgreSQL
       chapters: 
         - "contents/postgresql/pgsql-01-organization.qmd"
