@@ -1,0 +1,652 @@
+---
+title: "DuckDB Integration Guide"
+---
+
+## Overview: Data Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           DuckDB Integration Hub                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│     ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐     │
+│     │   CSV   │   │  Excel  │   │ Pandas  │   │ PyArrow │   │ Polars  │     │
+│     └────┬────┘   └────┬────┘   └────┬────┘   └────┬────┘   └────┬────┘     │
+│          │             │             │             │             │          │
+│          ▼             ▼             ▼             ▼             ▼          │
+│     ┌─────────────────────────────────────────────────────────────────┐     │
+│     │                                                                 │     │
+│     │                         DuckDB Engine                           │     │
+│     │                    (SQL Query Processing)                       │     │
+│     │                                                                 │     │
+│     └─────────────────────────────────────────────────────────────────┘     │
+│          │             │             │             │             │          │
+│          ▼             ▼             ▼             ▼             ▼          │
+│     ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐     │
+│     │   CSV   │   │ Parquet │   │ Pandas  │   │ PyArrow │   │ Polars  │     │
+│     └─────────┘   └─────────┘   └─────────┘   └─────────┘   └─────────┘     │
+│                                                                             │
+│     Zero-copy where possible • Vectorized execution • Lazy evaluation       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 1. CSV Integration
+
+### Reading CSV
+
+```python
+import duckdb
+
+# Basic read
+df = duckdb.sql("SELECT * FROM 'patients.csv'").df()
+
+# With options
+df = duckdb.sql("""
+    SELECT * FROM read_csv('patients.csv',
+        header = true,
+        delim = ',',
+        quote = '"',
+        escape = '"',
+        nullstr = 'NA',
+        skip = 0,
+        columns = {
+            'id': 'INTEGER',
+            'name': 'VARCHAR',
+            'age': 'INTEGER',
+            'modality': 'VARCHAR'
+        }
+    )
+""").df()
+
+# Auto-detect everything (DuckDB is smart!)
+df = duckdb.sql("SELECT * FROM read_csv_auto('patients.csv')").df()
+
+# Read multiple CSVs with glob pattern
+df = duckdb.sql("""
+    SELECT * FROM read_csv_auto('data/reports_*.csv')
+""").df()
+
+# Read from URL
+df = duckdb.sql("""
+    SELECT * FROM read_csv_auto(
+        'https://example.com/data/patients.csv'
+    )
+""").df()
+```
+
+### Writing CSV
+
+```python
+import duckdb
+
+# From query result
+duckdb.sql("""
+    COPY (
+        SELECT * FROM 'input.csv' 
+        WHERE age > 50
+    ) TO 'output.csv' (HEADER, DELIMITER ',')
+""")
+
+# With more options
+duckdb.sql("""
+    COPY (SELECT * FROM my_table)
+    TO 'output.csv' (
+        FORMAT CSV,
+        HEADER true,
+        DELIMITER ',',
+        QUOTE '"',
+        NULL 'NA'
+    )
+""")
+```
+
+### CSV Options Reference
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    CSV Read Options                          │
+├──────────────────┬───────────────────────────────────────────┤
+│ Option           │ Description                               │
+├──────────────────┼───────────────────────────────────────────┤
+│ header           │ First row contains column names (bool)    │
+│ delim            │ Field separator character                 │
+│ quote            │ Quote character for strings               │
+│ escape           │ Escape character within quotes            │
+│ nullstr          │ String representing NULL values           │
+│ skip             │ Number of rows to skip at start           │
+│ columns          │ Explicit column name/type mapping         │
+│ auto_detect      │ Auto-detect types (default: true)         │
+│ sample_size      │ Rows to sample for type detection         │
+│ all_varchar      │ Read all columns as VARCHAR               │
+│ dateformat       │ Format string for dates                   │
+│ timestampformat  │ Format string for timestamps              │
+└──────────────────┴───────────────────────────────────────────┘
+```
+
+---
+
+## 2. Excel Integration
+
+DuckDB requires the `spatial` extension for Excel support.
+
+```python
+import duckdb
+
+# Install and load the spatial extension (includes Excel support)
+duckdb.sql("INSTALL spatial")
+duckdb.sql("LOAD spatial")
+
+# Read Excel file
+df = duckdb.sql("""
+    SELECT * FROM st_read('radiology_data.xlsx')
+""").df()
+
+# Read specific sheet (using layer parameter)
+df = duckdb.sql("""
+    SELECT * FROM st_read(
+        'radiology_data.xlsx',
+        layer = 'CT_Studies'
+    )
+""").df()
+
+# Alternative: Use pandas as intermediary (more reliable)
+import pandas as pd
+
+# Read Excel with pandas, then query with DuckDB
+excel_df = pd.read_excel('radiology_data.xlsx', sheet_name='CT_Studies')
+result = duckdb.sql("""
+    SELECT modality, COUNT(*) as count
+    FROM excel_df
+    GROUP BY modality
+""").df()
+```
+
+### Recommended Excel Workflow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Recommended Excel Workflow                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   Option A: Direct (via spatial extension)                  │
+│   ─────────────────────────────────────────                 │
+│   Excel ──► st_read() ──► DuckDB ──► Result                 │
+│                                                             │
+│   Option B: Via Pandas (more control)                       │
+│   ────────────────────────────────────                      │
+│   Excel ──► pd.read_excel() ──► DataFrame ──► DuckDB        │
+│                                     │                       │
+│                              (handle sheets,                │
+│                               dtypes, etc.)                 │
+│                                                             │
+│   Option C: Convert to CSV/Parquet first (fastest)          │
+│   ────────────────────────────────────────────              │
+│   Excel ──► CSV/Parquet ──► DuckDB (blazing fast)           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3. Pandas Integration
+
+DuckDB has **first-class** Pandas support with zero-copy operations where possible.
+
+### Query DataFrames Directly
+
+```python
+import duckdb
+import pandas as pd
+
+# Create a pandas DataFrame
+patients = pd.DataFrame({
+    'patient_id': [1, 2, 3, 4, 5],
+    'name': ['Alice', 'Bob', 'Carol', 'David', 'Eve'],
+    'age': [45, 62, 38, 55, 70],
+    'modality': ['CT', 'MRI', 'CT', 'X-Ray', 'MRI'],
+    'finding': ['normal', 'tumor', 'normal', 'fracture', 'tumor']
+})
+
+studies = pd.DataFrame({
+    'study_id': [101, 102, 103, 104, 105],
+    'patient_id': [1, 2, 3, 4, 5],
+    'date': pd.to_datetime(['2024-01-15', '2024-01-16', '2024-01-17', 
+                            '2024-01-18', '2024-01-19']),
+    'radiologist': ['Dr. Smith', 'Dr. Jones', 'Dr. Smith', 'Dr. Lee', 'Dr. Jones']
+})
+
+# Query pandas DataFrames directly by name!
+result = duckdb.sql("""
+    SELECT 
+        p.modality,
+        p.finding,
+        COUNT(*) as count,
+        AVG(p.age) as avg_age
+    FROM patients p
+    JOIN studies s ON p.patient_id = s.patient_id
+    WHERE s.date >= '2024-01-16'
+    GROUP BY p.modality, p.finding
+    ORDER BY count DESC
+""").df()
+
+print(result)
+```
+
+### Output Conversions
+
+```python
+import duckdb
+
+query = "SELECT * FROM patients WHERE age > 50"
+
+# To Pandas DataFrame
+df = duckdb.sql(query).df()
+
+# To Pandas (fetchall style)
+rows = duckdb.sql(query).fetchall()
+
+# To dictionary
+data = duckdb.sql(query).fetchnumpy()  # Returns dict of numpy arrays
+
+# Show in console (pretty print)
+duckdb.sql(query).show()
+```
+
+### Register DataFrames Explicitly
+
+```python
+import duckdb
+import pandas as pd
+
+con = duckdb.connect()
+
+df = pd.DataFrame({'x': [1, 2, 3], 'y': ['a', 'b', 'c']})
+
+# Register with a custom name
+con.register('my_table', df)
+
+# Now query using that name
+result = con.sql("SELECT * FROM my_table WHERE x > 1").df()
+
+# Unregister when done
+con.unregister('my_table')
+```
+
+### Replace Pandas Operations with SQL
+
+```python
+import pandas as pd
+import duckdb
+
+# Sample data
+df = pd.DataFrame({
+    'patient_id': range(1, 1001),
+    'age': [30 + (i % 50) for i in range(1000)],
+    'modality': ['CT', 'MRI', 'X-Ray', 'US'] * 250,
+    'cost': [100 + (i * 10) for i in range(1000)]
+})
+
+# ┌────────────────────────────────────────────────────────────┐
+# │  Pandas vs DuckDB SQL - Common Operations                  │
+# └────────────────────────────────────────────────────────────┘
+
+# FILTERING
+# Pandas:  df[df['age'] > 50]
+# DuckDB:
+duckdb.sql("SELECT * FROM df WHERE age > 50")
+
+# GROUPBY + AGGREGATE
+# Pandas:  df.groupby('modality').agg({'cost': 'mean', 'age': 'max'})
+# DuckDB:
+duckdb.sql("""
+    SELECT modality, AVG(cost) as avg_cost, MAX(age) as max_age
+    FROM df
+    GROUP BY modality
+""")
+
+# SORTING
+# Pandas:  df.sort_values(['modality', 'age'], ascending=[True, False])
+# DuckDB:
+duckdb.sql("SELECT * FROM df ORDER BY modality ASC, age DESC")
+
+# WINDOW FUNCTIONS (much cleaner in SQL!)
+# Pandas:  df['rank'] = df.groupby('modality')['cost'].rank()
+# DuckDB:
+duckdb.sql("""
+    SELECT *,
+        RANK() OVER (PARTITION BY modality ORDER BY cost DESC) as cost_rank
+    FROM df
+""")
+```
+
+---
+
+## 4. PyArrow Integration
+
+DuckDB integrates seamlessly with Apache Arrow for **zero-copy** data exchange.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 Zero-Copy Arrow Integration                 │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   PyArrow Table                    DuckDB                   │
+│   ┌───────────────┐              ┌───────────────┐          │
+│   │  Column A     │◄────────────►│  Column A     │          │
+│   │  Column B     │  (zero-copy) │  Column B     │          │
+│   │  Column C     │◄────────────►│  Column C     │          │
+│   └───────────────┘              └───────────────┘          │
+│                                                             │
+│   Same memory, no data copying = FAST!                      │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Basic PyArrow Operations
+
+```python
+import duckdb
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+# Create an Arrow Table
+arrow_table = pa.table({
+    'patient_id': [1, 2, 3, 4, 5],
+    'name': ['Alice', 'Bob', 'Carol', 'David', 'Eve'],
+    'age': [45, 62, 38, 55, 70],
+    'modality': ['CT', 'MRI', 'CT', 'X-Ray', 'MRI']
+})
+
+# Query Arrow Table directly
+result = duckdb.sql("""
+    SELECT modality, COUNT(*) as count, AVG(age) as avg_age
+    FROM arrow_table
+    GROUP BY modality
+""")
+
+# Convert result to Arrow Table
+arrow_result = result.arrow()
+print(type(arrow_result))  # <class 'pyarrow.lib.Table'>
+
+# Convert to RecordBatchReader (for streaming)
+batch_reader = result.fetch_arrow_reader(batch_size=1000)
+```
+
+### Parquet Files (Arrow's Native Format)
+
+```python
+import duckdb
+
+# Read Parquet (super fast, columnar)
+df = duckdb.sql("""
+    SELECT * FROM 'studies.parquet'
+    WHERE modality = 'CT'
+""").df()
+
+# Read specific columns only (huge performance gain!)
+df = duckdb.sql("""
+    SELECT patient_id, finding 
+    FROM 'studies.parquet'
+""").df()
+
+# Read multiple Parquet files
+df = duckdb.sql("""
+    SELECT * FROM parquet_scan('data/year=*/month=*/*.parquet')
+""").df()
+
+# Write to Parquet
+duckdb.sql("""
+    COPY (SELECT * FROM my_table WHERE age > 50)
+    TO 'filtered_patients.parquet' (FORMAT PARQUET)
+""")
+
+# Write with compression
+duckdb.sql("""
+    COPY (SELECT * FROM my_table)
+    TO 'compressed.parquet' (
+        FORMAT PARQUET,
+        COMPRESSION 'zstd',
+        ROW_GROUP_SIZE 100000
+    )
+""")
+```
+
+### Arrow Streaming (Large Datasets)
+
+```python
+import duckdb
+import pyarrow as pa
+
+con = duckdb.connect()
+
+# For large results, use streaming to avoid memory issues
+query = "SELECT * FROM 'huge_dataset.parquet'"
+
+# Get a RecordBatchReader
+reader = con.execute(query).fetch_arrow_reader(batch_size=100_000)
+
+# Process in chunks
+for batch in reader:
+    # Process each batch (RecordBatch)
+    print(f"Processing batch with {batch.num_rows} rows")
+    # Do something with batch...
+```
+
+---
+
+## 5. Polars Integration
+
+DuckDB and Polars work beautifully together — both are built on Arrow!
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              DuckDB + Polars: Best of Both Worlds           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   Polars                           DuckDB                   │
+│   ──────                           ──────                   │
+│   • Fast DataFrame ops             • SQL interface          │
+│   • Lazy evaluation                • Complex joins          │
+│   • Rust-powered                   • Window functions       │
+│   • Method chaining                • File scanning          │
+│                                                             │
+│                    Arrow Format                             │
+│                    ────────────                             │
+│                   (shared memory)                           │
+│                                                             │
+│   Use Polars for: DataFrame transformations                 │
+│   Use DuckDB for: Complex SQL, aggregations, joins          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Basic Polars Integration
+
+```python
+import duckdb
+import polars as pl
+
+# Create a Polars DataFrame
+patients = pl.DataFrame({
+    'patient_id': [1, 2, 3, 4, 5],
+    'name': ['Alice', 'Bob', 'Carol', 'David', 'Eve'],
+    'age': [45, 62, 38, 55, 70],
+    'modality': ['CT', 'MRI', 'CT', 'X-Ray', 'MRI'],
+    'cost': [1500.0, 2500.0, 1500.0, 500.0, 2500.0]
+})
+
+studies = pl.DataFrame({
+    'study_id': [101, 102, 103, 104, 105],
+    'patient_id': [1, 2, 3, 4, 5],
+    'date': ['2024-01-15', '2024-01-16', '2024-01-17', '2024-01-18', '2024-01-19'],
+    'radiologist': ['Dr. Smith', 'Dr. Jones', 'Dr. Smith', 'Dr. Lee', 'Dr. Jones']
+})
+
+# Query Polars DataFrames with SQL!
+result = duckdb.sql("""
+    SELECT 
+        p.modality,
+        COUNT(*) as study_count,
+        AVG(p.cost) as avg_cost,
+        SUM(p.cost) as total_cost
+    FROM patients p
+    JOIN studies s ON p.patient_id = s.patient_id
+    GROUP BY p.modality
+    ORDER BY total_cost DESC
+""")
+
+# Convert result back to Polars
+polars_result = result.pl()
+print(polars_result)
+```
+
+### Output to Polars
+
+```python
+import duckdb
+import polars as pl
+
+# Query and get Polars DataFrame
+df = duckdb.sql("""
+    SELECT * FROM 'data.parquet' 
+    WHERE modality = 'CT'
+""").pl()
+
+# Now use Polars operations
+result = (
+    df
+    .filter(pl.col('age') > 50)
+    .group_by('finding')
+    .agg([
+        pl.count().alias('count'),
+        pl.col('cost').mean().alias('avg_cost')
+    ])
+    .sort('count', descending=True)
+)
+```
+
+### Polars LazyFrame Integration
+
+```python
+import duckdb
+import polars as pl
+
+# Create a LazyFrame
+lazy_df = pl.scan_parquet('large_dataset.parquet')
+
+# DuckDB can query LazyFrames too!
+# (It will collect only what's needed)
+result = duckdb.sql("""
+    SELECT modality, COUNT(*) 
+    FROM lazy_df 
+    WHERE age > 50
+    GROUP BY modality
+""").pl()
+```
+
+### Combined Workflow Example
+
+```python
+import duckdb
+import polars as pl
+
+# Step 1: Use DuckDB to read and join multiple files
+combined = duckdb.sql("""
+    SELECT 
+        p.*,
+        s.study_date,
+        s.radiologist,
+        r.report_text
+    FROM 'patients.parquet' p
+    JOIN 'studies.parquet' s ON p.patient_id = s.patient_id
+    JOIN 'reports.parquet' r ON s.study_id = r.study_id
+    WHERE p.modality IN ('CT', 'MRI')
+""").pl()
+
+# Step 2: Use Polars for complex transformations
+result = (
+    combined
+    .with_columns([
+        pl.col('study_date').str.to_date().alias('date'),
+        pl.col('report_text').str.len_chars().alias('report_length')
+    ])
+    .filter(pl.col('report_length') > 100)
+    .group_by(['modality', 'radiologist'])
+    .agg([
+        pl.count().alias('num_studies'),
+        pl.col('report_length').mean().alias('avg_report_length')
+    ])
+    .sort('num_studies', descending=True)
+)
+
+# Step 3: Use DuckDB again for final SQL operations if needed
+final = duckdb.sql("""
+    SELECT *,
+        RANK() OVER (PARTITION BY modality ORDER BY num_studies DESC) as rank
+    FROM result
+""").pl()
+```
+
+---
+
+## Quick Reference: Output Methods
+
+```python
+import duckdb
+
+query = "SELECT * FROM my_table"
+result = duckdb.sql(query)
+
+# Output conversions
+result.df()           # → pandas.DataFrame
+result.pl()           # → polars.DataFrame
+result.arrow()        # → pyarrow.Table
+result.fetchall()     # → List of tuples
+result.fetchone()     # → Single tuple
+result.fetchnumpy()   # → Dict of numpy arrays
+result.show()         # → Pretty print to console
+result.fetch_arrow_reader()  # → Arrow streaming reader
+```
+
+---
+
+## Performance Comparison
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│           Typical Performance (10M rows, group by + agg)               │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│   Pandas (in-memory)     ████████████████████████████████  ~8 sec      │
+│   Pandas (from CSV)      ████████████████████████████████████  ~12 sec │
+│                                                                        │
+│   Polars (in-memory)     ████████  ~2 sec                              │
+│   Polars (lazy, parquet) ████  ~1 sec                                  │
+│                                                                        │
+│   DuckDB (in-memory)     ████████  ~2 sec                              │
+│   DuckDB (from parquet)  ██  ~0.5 sec                                  │ 
+│                                                                        │
+│   * Results vary by hardware and data characteristics                  │
+│   * DuckDB and Polars are often 4-10x faster than Pandas               │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## When to Use What?
+
+| Task | Best Tool |
+|------|-----------|
+| Complex SQL joins across files | **DuckDB** |
+| Window functions | **DuckDB** |
+| Method-chained transformations | **Polars** |
+| Lazy evaluation pipelines | **Polars** |
+| Quick data exploration | **DuckDB** (SQL) or **Polars** |
+| Pandas ecosystem compatibility | **Pandas** via DuckDB |
+| Reading legacy Excel files | **Pandas** → DuckDB |
+| Large Parquet datasets | **DuckDB** or **Polars** |
+
+---

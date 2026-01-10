@@ -30,6 +30,8 @@ book:
       chapters: 
         - text: Intro
           href: "contents/duck/duckdb-getstarted.qmd"
+        - text: Integration
+          href: "contents/duck/duckdb-tools-integration.qmd"
     - part: dbplyr
       chapters: 
         - "contents/dbplyr/dbplyr-01-quickstart.qmd"
