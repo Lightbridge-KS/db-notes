@@ -1,0 +1,221 @@
+# Introduction to DuckDB
+
+## What is DuckDB?
+
+DuckDB is an **in-process analytical database** designed for fast analytical queries. Think of it as "SQLite for analytics" — it's embedded, serverless, and requires zero configuration.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Database Landscape                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   OLTP (Transactional)          OLAP (Analytical)           │
+│   ────────────────────          ─────────────────           │
+│   • PostgreSQL                  • DuckDB  ◄── You are here  │
+│   • MySQL                       • ClickHouse                │
+│   • SQLite                      • BigQuery                  │
+│                                                             │
+│   Row-oriented storage          Column-oriented storage     │
+│   Many small transactions       Few large scans             │
+│   INSERT/UPDATE heavy           SELECT/aggregate heavy      │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Why DuckDB?
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    Key Advantages                            │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. ZERO SETUP        → No server, just install & use        │
+│  2. BLAZING FAST      → Columnar storage + vectorized exec   │
+│  3. SQL FRIENDLY      → Rich SQL dialect (PostgreSQL-like)   │
+│  4. FILE FRIENDLY     → Query CSV, Parquet, JSON directly    │
+│  5. EMBEDDED          → Runs in your Python/R process        │
+│  6. FREE & OPEN       → MIT licensed                         │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Installation
+
+### Python
+```bash
+pip install duckdb
+```
+
+### R
+```r
+install.packages("duckdb")
+```
+
+---
+
+## Quick Start Examples
+
+### Python Basics
+
+```python
+import duckdb
+
+# Create an in-memory database (default)
+con = duckdb.connect()
+
+# Run a simple query
+result = con.sql("SELECT 'Hello, DuckDB!' AS greeting")
+print(result)
+
+# Create a table
+con.sql("""
+    CREATE TABLE patients (
+        id INTEGER,
+        name VARCHAR,
+        age INTEGER,
+        modality VARCHAR
+    )
+""")
+
+# Insert data
+con.sql("""
+    INSERT INTO patients VALUES
+    (1, 'Alice', 45, 'CT'),
+    (2, 'Bob', 62, 'MRI'),
+    (3, 'Carol', 38, 'X-Ray'),
+    (4, 'David', 55, 'CT')
+""")
+
+# Query with aggregation
+con.sql("""
+    SELECT modality, COUNT(*) as count, AVG(age) as avg_age
+    FROM patients
+    GROUP BY modality
+    ORDER BY count DESC
+""").show()
+```
+
+### Query Files Directly (No Import Needed!)
+
+```python
+# Query a CSV file directly
+con.sql("SELECT * FROM 'data/radiology_reports.csv' LIMIT 10")
+
+# Query a Parquet file
+con.sql("SELECT * FROM 'data/dicom_metadata.parquet' WHERE modality = 'CT'")
+
+# Query multiple files with glob pattern
+con.sql("SELECT * FROM 'data/reports_*.csv'")
+```
+
+### Integration with Pandas
+
+```python
+import pandas as pd
+import duckdb
+
+# Create a pandas DataFrame
+df = pd.DataFrame({
+    'study_id': [1, 2, 3, 4],
+    'finding': ['normal', 'tumor', 'fracture', 'normal'],
+    'confidence': [0.95, 0.87, 0.92, 0.98]
+})
+
+# Query pandas DataFrame directly with SQL!
+result = duckdb.sql("""
+    SELECT finding, COUNT(*) as count, AVG(confidence) as avg_conf
+    FROM df
+    GROUP BY finding
+""").df()  # .df() converts result back to pandas
+
+print(result)
+```
+
+---
+
+## R Basics
+
+```r
+library(duckdb)
+library(DBI)
+
+# Create connection
+con <- dbConnect(duckdb())
+
+# Query directly
+dbGetQuery(con, "SELECT 'Hello from DuckDB' AS greeting")
+
+# Query a data.frame directly
+patients <- data.frame(
+  id = 1:4,
+  name = c("Alice", "Bob", "Carol", "David"),
+  modality = c("CT", "MRI", "X-Ray", "CT")
+)
+
+# Register the data.frame
+duckdb_register(con, "patients", patients)
+
+# Now query it with SQL
+dbGetQuery(con, "SELECT modality, COUNT(*) FROM patients GROUP BY modality")
+
+# Don't forget to disconnect
+dbDisconnect(con, shutdown = TRUE)
+```
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Your Application                        │
+│                   (Python / R / CLI)                        │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      DuckDB Engine                          │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐   │
+│  │ SQL Parser  │→ │  Optimizer   │→ │ Vectorized Engine │   │
+│  └─────────────┘  └──────────────┘  └───────────────────┘   │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+         ┌────────────────┼────────────────┐
+         ▼                ▼                ▼
+    ┌─────────┐     ┌──────────┐     ┌──────────┐
+    │  CSV    │     │ Parquet  │     │  JSON    │
+    └─────────┘     └──────────┘     └──────────┘
+         │                │                │
+         └────────────────┴────────────────┘
+                          │
+                     File System
+```
+
+---
+
+## When to Use DuckDB?
+
+| Use Case | DuckDB? | Why |
+|----------|---------|-----|
+| Analyze local CSV/Parquet files | ✅ Yes | Direct file querying |
+| Ad-hoc data exploration | ✅ Yes | Fast, no setup |
+| ETL pipelines | ✅ Yes | Great for transforms |
+| Embedded analytics in apps | ✅ Yes | In-process, portable |
+| High-concurrency web apps | ❌ No | Use PostgreSQL |
+| Real-time streaming | ❌ No | Use Kafka/Flink |
+
+---
+
+## Next Steps
+
+Would you like me to dive deeper into any of these topics?
+
+1. **Advanced SQL** — Window functions, CTEs, complex joins
+2. **File Formats** — Working with Parquet, CSV, JSON
+3. **Performance** — Indexing, optimization tips
+4. **Persistent Database** — Saving to disk instead of in-memory
+5. **Extensions** — Spatial, HTTP, and other extensions
+6. **Integration** — With Polars, Arrow, or other tools

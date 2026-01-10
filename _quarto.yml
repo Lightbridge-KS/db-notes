@@ -26,6 +26,10 @@ book:
         - "contents/postgresql/pgsql-02-syntax.qmd"
         - "contents/postgresql/pgsql-03-count.qmd"
         - "contents/postgresql/pgsql-03-join.qmd"
+    - part: DuckDB
+      chapters: 
+        - text: Intro
+          href: "contents/duck/duckdb-getstarted.qmd"
     - part: dbplyr
       chapters: 
         - "contents/dbplyr/dbplyr-01-quickstart.qmd"
