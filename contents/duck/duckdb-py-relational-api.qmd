@@ -1,0 +1,431 @@
+---
+title: "DuckDB Python Relational API — A dplyr-style Approach"
+---
+
+Since you have advanced R/dplyr experience, you'll find DuckDB's **Relational API** very intuitive. It provides a chainable, verb-based interface similar to dplyr's pipe workflow.
+
+
+---
+
+## Overview: DuckDB Relational API vs dplyr
+
+The DuckDB Relational API provides a **fluent, chainable interface** that will feel familiar to you as an R/dplyr user. The API is centered around `DuckDBPyRelation` nodes, which can be seen as symbolic representations of SQL queries.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                      CONCEPTUAL COMPARISON                             │
+├────────────────────────────────────────────────────────────────────────┤
+│   R/dplyr                      │   Python/DuckDB Relational API        │
+│────────────────────────────────┼───────────────────────────────────────│
+│   tibble / data.frame          │   DuckDBPyRelation                    │
+│   %>% (pipe)                   │   . (method chaining)                 │
+│   filter()                     │   .filter()                           │
+│   select()                     │   .select() / .project()              │
+│   mutate()                     │   .select() with expressions          │
+│   arrange()                    │   .order() / .sort()                  │
+│   group_by() + summarize()     │   .aggregate()                        │
+│   inner_join()                 │   .join(how='inner')                  │
+│   left_join()                  │   .join(how='left')                   │
+│   distinct()                   │   .distinct()                         │
+│   head(n)                      │   .limit(n)                           │
+│   collect()                    │   .df() / .fetchall() / .show()       │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Key Concept: Lazy Evaluation
+
+Just like dplyr's lazy evaluation with databases, the relations do not hold any data – and nothing is executed – until a method that triggers execution is called.
+
+```python
+import duckdb
+
+con = duckdb.connect()
+
+# This does NOT execute yet (lazy)
+rel = con.sql("FROM range(1_000_000_000)")
+
+# Only when you call .show(), .df(), .fetchall(), etc., 
+# does execution happen
+rel.show()  # Triggers execution
+```
+
+---
+
+## Quick Reference: dplyr → DuckDB Mapping
+
+```python
+import duckdb
+import pandas as pd
+
+con = duckdb.connect()
+
+# Sample data
+df = pd.DataFrame({
+    'patient_id': [1, 2, 3, 4, 5],
+    'age': [25, 45, 35, 55, 30],
+    'diagnosis': ['A', 'B', 'A', 'C', 'B'],
+    'score': [85, 92, 78, 88, 95]
+})
+
+# Create a relation from DataFrame
+rel = con.from_df(df)
+```
+
+### 1. **filter()** → `.filter()`
+
+```r
+# dplyr
+df %>% filter(age > 30)
+```
+
+```python
+# DuckDB
+rel.filter("age > 30")
+```
+
+### 2. **select()** → `.select()` or `.project()`
+
+```r
+# dplyr
+df %>% select(patient_id, age)
+```
+
+```python
+# DuckDB
+rel.select("patient_id, age")
+# or
+rel.project("patient_id, age")
+```
+
+### 3. **mutate()** → `.select()` with expressions
+
+```r
+# dplyr
+df %>% mutate(age_group = ifelse(age > 40, "older", "younger"))
+```
+
+```python
+# DuckDB - use select with new column expressions
+rel.select("*, CASE WHEN age > 40 THEN 'older' ELSE 'younger' END AS age_group")
+```
+
+### 4. **arrange()** → `.order()` or `.sort()`
+
+```r
+# dplyr
+df %>% arrange(desc(score))
+```
+
+```python
+# DuckDB
+rel.order("score DESC")
+# or
+rel.sort("score DESC")
+```
+
+### 5. **group_by() + summarize()** → `.aggregate()`
+
+```r
+# dplyr
+df %>% 
+  group_by(diagnosis) %>% 
+  summarize(
+    avg_score = mean(score),
+    n = n()
+  )
+```
+
+```python
+# DuckDB
+rel.aggregate("diagnosis, AVG(score) AS avg_score, COUNT(*) AS n", "diagnosis")
+#             ↑ select expression                                   ↑ group by
+```
+
+### 6. **head(n)** → `.limit(n)`
+
+```r
+# dplyr
+df %>% head(3)
+```
+
+```python
+# DuckDB
+rel.limit(3)
+```
+
+### 7. **distinct()** → `.distinct()`
+
+```r
+# dplyr
+df %>% distinct(diagnosis)
+```
+
+```python
+# DuckDB
+rel.select("diagnosis").distinct()
+```
+
+---
+
+## Complete Example: Method Chaining (like pipe)
+
+Here's a realistic example that chains operations together:
+
+```python
+import duckdb
+import pandas as pd
+
+con = duckdb.connect()
+
+# Sample radiology data
+df = pd.DataFrame({
+    'study_id': range(1, 101),
+    'modality': ['CT', 'MRI', 'CT', 'XR'] * 25,
+    'body_part': ['chest', 'brain', 'abdomen', 'chest'] * 25,
+    'finding_count': [i % 5 + 1 for i in range(100)],
+    'ai_confidence': [0.75 + (i % 25) * 0.01 for i in range(100)]
+})
+
+rel = con.from_df(df)
+
+# ┌────────────────────────────────────────────────────────────────┐
+# │  dplyr equivalent:                                             │
+# │                                                                │
+# │  df %>%                                                        │
+# │    filter(modality %in% c("CT", "MRI")) %>%                    │
+# │    filter(ai_confidence > 0.8) %>%                             │
+# │    select(study_id, modality, body_part, ai_confidence) %>%    │
+# │    arrange(desc(ai_confidence)) %>%                            │
+# │    head(10)                                                    │
+# └────────────────────────────────────────────────────────────────┘
+
+result = (
+    rel
+    .filter("modality IN ('CT', 'MRI')")
+    .filter("ai_confidence > 0.8")
+    .select("study_id, modality, body_part, ai_confidence")
+    .order("ai_confidence DESC")
+    .limit(10)
+)
+
+result.show()
+```
+
+---
+
+## Creating Relations (Data Sources)
+
+DuckDB provides multiple ways to create relations:
+
+```python
+import duckdb
+
+con = duckdb.connect()
+
+# 1. From SQL query
+rel = con.sql("SELECT * FROM read_csv('data.csv')")
+
+# 2. From Pandas DataFrame
+rel = con.from_df(my_dataframe)
+
+# 3. From CSV file
+rel = con.read_csv("patients.csv")
+
+# 4. From Parquet file
+rel = con.read_parquet("scans.parquet")
+
+# 5. From JSON file
+rel = con.read_json("results.json")
+
+# 6. From existing table
+rel = con.table("my_table")
+
+# 7. From values directly
+rel = con.values([1, 'hello'], [2, 'world'])
+```
+
+---
+
+## Aggregation with Groups
+
+The `.aggregate()` method combines dplyr's `group_by()` + `summarize()`:
+
+```python
+# ┌────────────────────────────────────────────────────────────────┐
+# │  dplyr:                                                        │
+# │  df %>%                                                        │
+# │    group_by(modality, body_part) %>%                           │
+# │    summarize(                                                  │
+# │      count = n(),                                              │
+# │      avg_conf = mean(ai_confidence),                           │
+# │      max_findings = max(finding_count)                         │
+# │    )                                                           │
+# └────────────────────────────────────────────────────────────────┘
+
+result = rel.aggregate(
+    # First arg: what to select (aggregations)
+    "modality, body_part, COUNT(*) AS count, "
+    "AVG(ai_confidence) AS avg_conf, "
+    "MAX(finding_count) AS max_findings",
+    
+    # Second arg: group by columns
+    "modality, body_part"
+)
+```
+
+---
+
+## Joins
+
+```python
+# Create two relations
+patients = con.sql("SELECT * FROM patients")
+studies = con.sql("SELECT * FROM studies")
+
+# ┌─────────────────────────────────────┐
+# │  dplyr: left_join(patients, studies, by = "patient_id")
+# └─────────────────────────────────────┘
+
+result = patients.join(
+    studies, 
+    condition="patient_id",  # USING syntax
+    how="left"               # 'inner', 'left', 'right', 'outer', 'semi', 'anti'
+)
+
+# Or with explicit ON condition:
+patients_alias = patients.set_alias("p")
+studies_alias = studies.set_alias("s")
+
+result = patients_alias.join(
+    studies_alias,
+    condition="p.patient_id = s.patient_id",
+    how="inner"
+)
+```
+
+---
+
+## Output Methods (like collect())
+
+```python
+# Show in console (like print)
+rel.show()
+
+# To Pandas DataFrame (like collect())
+df = rel.df()
+
+# To Arrow Table
+arrow_table = rel.arrow()
+
+# To Python list of tuples
+rows = rel.fetchall()
+
+# To DuckDB table (persist)
+rel.to_table("my_new_table")
+
+# To CSV file
+rel.write_csv("output.csv")
+
+# To Parquet file
+rel.write_parquet("output.parquet")
+```
+
+---
+
+## Inspection Methods
+
+```python
+# Column names (like colnames())
+rel.columns  # ['patient_id', 'age', 'diagnosis', 'score']
+
+# Data types (like sapply(df, class))
+rel.dtypes   # [BIGINT, BIGINT, VARCHAR, BIGINT]
+
+# Shape (like dim())
+rel.shape    # (100, 4)
+
+# Describe statistics (like summary())
+rel.describe()
+
+# View the generated SQL
+rel.sql_query()
+
+# Explain query plan (like dplyr's show_query for databases)
+rel.explain()
+```
+
+---
+
+## Practical Workflow Example
+
+Here's a complete workflow that should feel very natural coming from dplyr:
+
+```python
+import duckdb
+
+con = duckdb.connect()
+
+# Read data
+scans = con.read_parquet("radiology_scans.parquet")
+patients = con.read_csv("patients.csv")
+
+# Analysis pipeline (dplyr-style)
+result = (
+    scans
+    .set_alias("s")
+    .join(
+        patients.set_alias("p"),
+        condition="s.patient_id = p.patient_id",
+        how="inner"
+    )
+    .filter("s.modality = 'CT'")
+    .filter("s.scan_date >= '2024-01-01'")
+    .select("""
+        s.study_id,
+        p.patient_id,
+        p.age,
+        s.body_region,
+        s.finding_count,
+        CASE 
+            WHEN s.finding_count > 3 THEN 'High'
+            WHEN s.finding_count > 1 THEN 'Medium'
+            ELSE 'Low'
+        END AS severity
+    """)
+    .order("finding_count DESC")
+    .limit(100)
+)
+
+# View results
+result.show()
+
+# Export to DataFrame for further analysis
+df = result.df()
+```
+
+---
+
+## Summary Cheat Sheet
+
+```
+┌──────────────────────┬───────────────────────────────────────────────┐
+│  dplyr               │  DuckDB Relational API                        │
+├──────────────────────┼───────────────────────────────────────────────┤
+│  tbl(con, "table")   │  con.table("table")                           │
+│  read_csv()          │  con.read_csv()                               │
+│  filter(x > 5)       │  .filter("x > 5")                             │
+│  select(a, b)        │  .select("a, b")                              │
+│  mutate(c = a + b)   │  .select("*, a + b AS c")                     │
+│  arrange(desc(x))    │  .order("x DESC")                             │
+│  group_by(x)         │  (combined in aggregate)                      │
+│  summarize(n = n())  │  .aggregate("x, COUNT(*) AS n", "x")          │
+│  left_join(y, by=..) │  .join(y, "col", how="left")                  │
+│  distinct()          │  .distinct()                                  │
+│  head(10)            │  .limit(10)                                   │
+│  collect()           │  .df()                                        │
+│  glimpse()           │  .show() / .describe()                        │
+│  %>%                 │  . (method chaining)                          │
+└──────────────────────┴───────────────────────────────────────────────┘
+```
