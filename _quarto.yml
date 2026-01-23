@@ -9,6 +9,10 @@ book:
   site-url: https://db-notes-lightbridge.netlify.app
   chapters:
     - index.qmd
+    - part: Algorithm
+      chapters: 
+        - text: B-tree Intro
+          href: "contents/algorithm/b-tree-intro.qmd"
     - part: DB
       chapters: 
         - "contents/concept/db-01-organization.qmd"
