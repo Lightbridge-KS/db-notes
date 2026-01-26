@@ -1,0 +1,26 @@
+# MongoDB CLI Cheatsheet
+
+## Starting & Connecting
+
+```bash
+# Start MongoDB service (macOS/Homebrew)
+brew services start mongodb/brew/mongodb-community
+
+# Stop MongoDB service
+brew services stop mongodb/brew/mongodb-community
+
+# Check service status
+brew services list
+
+# Connect to local MongoDB (default: localhost:27017)
+mongosh
+
+# Connect with connection string
+mongosh "mongodb://localhost:27017"
+
+# Connect to specific database
+mongosh "mongodb://localhost:27017/myDatabase"
+
+# Connect with authentication
+mongosh "mongodb://username:password@localhost:27017/myDatabase"
+```

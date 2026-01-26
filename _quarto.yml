@@ -38,6 +38,10 @@ book:
           href: "contents/duck/duckdb-tools-integration.qmd"
         - text: Python Relational API
           href: "contents/duck/duckdb-py-relational-api.qmd"
+    - part: MongoDB
+      chapters: 
+        - text: MongoDB - CLI
+          href: "contents/mongodb/mongodb-cli-cheatsheet.qmd"
     - part: dbplyr
       chapters: 
         - "contents/dbplyr/dbplyr-01-quickstart.qmd"
